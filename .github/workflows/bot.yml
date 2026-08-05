@@ -2,7 +2,7 @@ name: Bot
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "* * * * *"
   workflow_dispatch:
 
 concurrency:
@@ -18,15 +18,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - name: Run bot tick
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        run: python bot.py
+        run: |
+          pip install --quiet --disable-pip-version-check googlenewsdecoder
+          python3 bot.py
 
       - name: Save state
         run: |

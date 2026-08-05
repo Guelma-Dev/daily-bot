@@ -1,3 +1,4 @@
+import html
 import json
 import os
 import random
@@ -6,6 +7,7 @@ import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 import datetime
+from html.parser import HTMLParser
 from zoneinfo import ZoneInfo
 
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
@@ -20,7 +22,7 @@ RIDDLE_DELAY = 20 * 60
 
 STATE_FILE = "state.json"
 
-HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) WeatherBot/1.0"}
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
 
 NEWS_QUERY = urllib.parse.quote("جرائم التحقيقات الجنائية")
 NEWS_URL = (
@@ -29,36 +31,54 @@ NEWS_URL = (
 )
 
 ARABIC_TIPS = [
-    "اشرب الماء قبل أن تشعر بالعطش، فالعطش علامة تأخر.",
-    "ابدأ يومك بكوب ماء دافئ مع ليمون، ينشط الجسم والهضم.",
-    "خصص 30 دقيقة يومياً للمشي، تحمي قلبك وتهدئ أعصابك.",
-    "نام 7-8 ساعات يومياً؛ فالنوم الكافي يقوي المناعة والذاكرة.",
-    "وجبة الإفطار سر الطاقة؛ لا تهملها حتى لو خفيفة.",
-    "خذ استراحة 5 دقائق كل ساعة عمل، سترفع إنتاجيتك.",
-    "ابتسم للآخرين، فالابتسامة تفتح القلوب وتبسط الأجواء.",
-    "رتب سريرك فور الاستيقاظ؛ خطوة صغيرة تهيئك ليوم منظم.",
-    "قلل السكر والمشروبات الغازية، ستشعر بفرق كبير في نشاطك.",
-    "خصم من وقت الجوال ساعة يومياً لقراءة كتاب.",
-    "قبل النوم، اكتب ثلاثة أشياء امتنّت لها اليوم.",
-    "تجنب الأكل قبل النوم بساعتين على الأقل لهضم أفضل.",
-    "تعلم شيئاً جديداً كل يوم، ولو صفحة واحدة.",
-    "صاحب الناس الطيبين، فالأخلاق تنتقل بالمجالسة.",
-    "لا تؤجل عمل اليوم إلى الغد، فالوقت أغلى ما تملك.",
-    "ممارسة الرياضة 3 مرات أسبوعياً تحسن مزاجك ومظهرك.",
-    "استخدم درج بدلاً من المصعد، حركة بسيطة تفيد جسمك.",
-    "أكثر من شرب الماء في الطقس الحار خاصةً صيفاً.",
-    "نظّم مهامك بأهميتها أولاً ثم بأسرعها.",
-    "احترم وقت الآخرين كما تحترم وقتك.",
-    "حاول أن تتعلم لغة جديدة، فهي تفتح لك آفاقاً واسعة.",
-    "خض تجربة جديدة كل شهر، فالروتين قاتل الحماس.",
-    "بعد العمل، خصص وقتاً للعائلة ولو كان قصيراً.",
-    "راقب إنفاقك الصغير، فهي التي تكوّن مدخراتك.",
-    "اجلس بوضعية صحيحة، ظهرك سيشكرك لاحقاً.",
-    "قلل من الشاشات قبل النوم بساعة لنوم أعمق.",
-    "أعطِ نفسك يوم إجازة من الالتزامات مرة أسبوعياً.",
-    "الصدقة تريح النفس وتزيل الهم، جربها اليوم.",
-    "استمع أكثر مما تتكلم، ففي الإنصات حكمة.",
-    "ابدأ المهمات الصعبة أول شيء في الصباح وأنت منتعش.",
+    "اشرب كوب ماء بعد الاستيقاظ مباشرة؛ جسدك كان بلا ترطيب طوال الليل.",
+    "ابدأ يومك بأهم مهمة لديك قبل فتح الجوال ورسائل العمل.",
+    "المشي نصف ساعة يومياً يحسّن القلب والمزاج ويخفض التوتر.",
+    "النوم من 7 إلى 8 ساعات بمواعيد ثابتة يقوي الذاكرة والمناعة.",
+    "وجبة الإفطار المتوازنة تمنحك طاقة الصباح وتركيزاً أطول.",
+    "قلل السكر والمشروبات الغازية وستلاحظ فرقاً في نشاطك ووزنك.",
+    "خصص وقتاً يومياً للقراءة ولو 20 دقيقة؛ فوائدها تتراكم مع الوقت.",
+    "اجلس بوضعية سليمة ولا تطأطئ رأسك طويلاً للهاتف.",
+    "قبل النوم، أطفئ الشاشات بساعة لتنام أعمق وأهدأ.",
+    "تنفس بعمق عشر مرات عند التوتر؛ يهدئ جهازك العصبي فوراً.",
+    "نظم مالك: سجل مصاريفك الأسبوعية وستكتشف أين تذهب الأموال.",
+    "ادخر ولو مبلغاً صغيراً شهرياً؛ الاستمرار أهم من المقدار.",
+    "حافظ على صلواتك؛ السكينة تبدأ من اتصالك بخالقك.",
+    "احفظ ولو آيات قليلة أسبوعياً من القرآن، فالبركة في المواظبة.",
+    "صاحب أهل الخير والأخلاق؛ فصحبتك من أعظم ما يكسبك.",
+    "أنصت أكثر مما تتكلم؛ فالإنسان الذي يصغي تُفتح له القلوب.",
+    "لا تؤجل عمل اليوم إلى الغد؛ اجعل مبدأك التنفيذ الفوري.",
+    "خصص وقتاً للعائلة يومياً بعيداً عن الشاشات.",
+    "أشكر الله على نعمك صباح مساء؛ الشكر يزيد النعم.",
+    "ابدأ مشاريعك الصغيرة بدل تأجيلها؛ الخبرة من التجربة لا من التردد.",
+    "اكتب أهدافك على ورقة؛ الأهداف المكتوبة تتحقق أكثر من المنسية.",
+    "تعلم مهارة رقمية واحدة هذا الشهر؛ تفتح لك فرص عمل جديدة.",
+    "ابتسم؛ فالابتسامة صدقة وتخفف هموم يومك.",
+    "قلل من مقارنة نفسك بالآخرين؛ قارن نفسك بنسختك السابقة فقط.",
+    "نظم منزلك ومكتبك؛ الفوضى الخارجية تخلق فوضى داخلية.",
+    "اشرب الشاي أو القهوة باعتدال ولا تتجاوز فنجانين صباحاً.",
+    "أعطِ جسمك يوماً من الراحة من الرياضة أسبوعياً كي يتعافى.",
+    "استخدم السلالم بدل المصعد كلما سنحت الفرصة.",
+    "حافظ على وقتك ولا تسرفه في مواقع التواصل بلا فائدة.",
+    "نظم نومك مع الفجر؛ القيام المبكر يبارك في وقتك.",
+    "استشر من يقول لك الحقيقة لا من يجامل؛ النصيحة الصادقة كنز.",
+    "زر والديك وأرحهما بكلمة طيبة؛ فالبر خير ربح في الدنيا.",
+    "تجنب الجدال العقيم، ولا تجعل آخر كلامك خطأ.",
+    "خطط ليومك في الليلة السابقة؛ وفر وقت القرارات صباحاً.",
+    "اقرأ في السيرة والتاريخ؛ فالعبرة بهم خير معلم.",
+    "استغفر كثيراً؛ يريح النفس ويوسع الرزق.",
+    "ارتقِ بالرد الجميل حتى لمن أساء؛ فالعفو زينة.",
+    "حافظ على صحة أسنانك: نظفها مرتين يومياً وزر الطبيب كل ستة أشهر.",
+    "تعرض للشمس ربع ساعة صباحاً لامتصاص فيتامين د.",
+    "احمل معك زجاجة ماء دائماً وتذكر أن تشرب كل ساعة.",
+    "تعلم أن تقول لا بلطف؛ لا تكن جسراً لكل من يريد العبور.",
+    "حسنات اليوم الصغيرة تتراكم لتصبح إنجازات كبيرة.",
+    "اعتزل الراحة الزائدة؛ فالخمول يفسد الجسم والعقل.",
+    "احفظ أرقام الطوارئ والمستشفيات القريبة في هاتفك.",
+    "خطة أسبوعية بسيطة تكفيك فوضى الأشهر؛ نظم أولوياتك.",
+    "لا تستهن بالكلمة الطيبة؛ فقد تكون سبب هداية شخص.",
+    "جدد نيتك في كل عمل تعمله، فالأعمال بالنيات.",
+    "خذ نفساً قبل الغضب؛ فالغضب قرار متسرع تندم عليه.",
 ]
 
 ARABIC_RIDDLES = [
@@ -93,14 +113,6 @@ def http_get(url):
     req = urllib.request.Request(url, headers=HEADERS)
     with urllib.request.urlopen(req, timeout=30) as resp:
         return json.loads(resp.read().decode("utf-8"))
-
-
-def gtranslate(text):
-    q = urllib.parse.quote(text[:2000])
-    url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ar&dt=t&q={q}"
-    req = urllib.request.Request(url, headers=HEADERS)
-    d = json.loads(urllib.request.urlopen(req, timeout=20).read().decode())
-    return "".join(part[0] for part in d[0])
 
 
 def get_weather():
@@ -140,38 +152,85 @@ def get_weather():
     }
 
 
-def get_advice():
-    try:
-        d = http_get("https://api.adviceslip.com/advice")
-        return gtranslate(d["slip"]["advice"])
-    except Exception:
-        return random.choice(ARABIC_TIPS)
+def get_advice(state):
+    used = set(state.get("used_advice", []))
+    fresh = [t for t in ARABIC_TIPS if t not in used]
+    pool = fresh or ARABIC_TIPS
+    tip = random.choice(pool)
+    used_list = state.get("used_advice", [])
+    used_list.insert(0, tip)
+    state["used_advice"] = used_list[:20]
+    return tip
 
 
-def get_news():
+class TextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.paras = []
+        self._cur = []
+        self._skip = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style", "noscript"):
+            self._skip += 1
+        if tag == "p":
+            self._cur = []
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style", "noscript") and self._skip:
+            self._skip -= 1
+        if tag == "p":
+            txt = " ".join("".join(self._cur).split())
+            if len(txt) >= 60:
+                self.paras.append(txt)
+            self._cur = []
+
+    def handle_data(self, data):
+        if not self._skip:
+            self._cur.append(data)
+
+
+def fetch_article_text(link):
+    req = urllib.request.Request(link, headers=HEADERS)
+    with urllib.request.urlopen(req, timeout=25) as resp:
+        raw = resp.read()
+        try:
+            html_str = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            html_str = raw.decode("iso-8859-6", errors="replace")
+    p = TextExtractor()
+    p.feed(html_str)
+    return p.paras[:4]
+
+
+def get_news(state):
     try:
         req = urllib.request.Request(NEWS_URL, headers=HEADERS)
         data = urllib.request.urlopen(req, timeout=25).read()
         root = ET.fromstring(data)
+        items = []
         for item in root.iter("item"):
             title = (item.findtext("title") or "").strip()
             source = (item.findtext("source") or "").strip()
+            link = (item.findtext("link") or "").strip()
             if not title:
                 continue
             for sep in (" - " + source, " -" + source):
                 if title.endswith(sep):
                     title = title[: -len(sep)].strip()
                     break
-            if source:
-                return f"📰 {title}\n🗞️ المصدر: {source}"
-            return f"📰 {title}"
+            items.append({"title": title, "source": source, "link": link})
+        if not items:
+            return None
+        used = set(state.get("used_news", []))
+        fresh = [it for it in items if it["title"] not in used]
+        chosen = random.choice(fresh or items)
+        used_list = state.get("used_news", [])
+        used_list.insert(0, chosen["title"])
+        state["used_news"] = used_list[:30]
+        return chosen
     except Exception:
-        pass
-    return random.choice(FALLBACK_NEWS)
-
-
-def get_riddle():
-    return random.choice(ARABIC_RIDDLES)
+        return None
 
 
 def send_telegram(text):
@@ -231,11 +290,32 @@ def build_message(w, advice, news, riddle_q):
     return msg
 
 
+def build_news_block(article):
+    if article is None:
+        return html.escape(random.choice(FALLBACK_NEWS), quote=False)
+    title = html.escape(article["title"], quote=False)
+    source = html.escape(article["source"], quote=False) if article["source"] else "غير معروف"
+    body = ""
+    try:
+        from googlenewsdecoder import gnewsdecoder
+        res = gnewsdecoder(article["link"])
+        real = (res.get("decoded_url") or "").strip() or article["link"]
+        paras = fetch_article_text(real)
+        if paras:
+            body = "\n\n".join(html.escape(p, quote=False) for p in paras)
+    except Exception:
+        pass
+    if body:
+        return f"📰 <b>{title}</b>\n🗞️ المصدر: {source}\n\n{body}"
+    return f"📰 <b>{title}</b>\n🗞️ المصدر: {source}"
+
+
 def load_state():
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, encoding="utf-8") as f:
             return json.load(f)
-    return {"last_main_ts": 0, "riddle_answer": "", "riddle_sent_ts": 0}
+    return {"last_main_ts": 0, "riddle_answer": "", "riddle_sent_ts": 0,
+            "used_news": [], "used_advice": []}
 
 
 def save_state(st):
@@ -250,9 +330,10 @@ def run():
 
     if now - st["last_main_ts"] >= MAIN_INTERVAL:
         w = get_weather()
-        advice = get_advice()
-        news = get_news()
-        riddle_q, riddle_a = get_riddle()
+        advice = get_advice(st)
+        article = get_news(st)
+        news = build_news_block(article)
+        riddle_q, riddle_a = random.choice(ARABIC_RIDDLES)
         msg = build_message(w, advice, news, riddle_q)
         send_telegram(msg)
         print("Main message sent", flush=True)
@@ -262,7 +343,8 @@ def run():
         changed = True
 
     if st["riddle_answer"] and now - st["riddle_sent_ts"] >= RIDDLE_DELAY:
-        text = f"🤔 <b>حل اللغز</b>\n\nاللغز اللي أرسلته لك، حله هو:\n\n<b>{st['riddle_answer']}</b>\n\nهل حليته؟ 😄"
+        answer = html.escape(st["riddle_answer"], quote=False)
+        text = f"🤔 <b>حل اللغز</b>\n\nاللغز اللي أرسلته لك، حله هو:\n\n<b>{answer}</b>\n\nهل حليته؟ 😄"
         send_telegram(text)
         print("Riddle answer sent", flush=True)
         st["riddle_answer"] = ""

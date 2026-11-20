@@ -110,9 +110,23 @@ FALLBACK_NEWS = [
 ]
 
 
+def urlopen_retry(req, timeout=30, attempts=4):
+    """urlopen with backoff on 429/5xx: GitHub runner IPs get rate-limited
+    by the weather/news providers, and one 429 must not kill the tick."""
+    delay = 10
+    for i in range(attempts):
+        try:
+            return urllib.request.urlopen(req, timeout=timeout)
+        except Exception:
+            if i == attempts - 1:
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, 60)
+
+
 def http_get(url):
     req = urllib.request.Request(url, headers=HEADERS)
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urlopen_retry(req, timeout=30) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -194,7 +208,7 @@ class TextExtractor(HTMLParser):
 def fetch_article(link):
     """Return (paragraphs, image_url) from the article page; ([], "") on failure."""
     req = urllib.request.Request(link, headers=HEADERS)
-    with urllib.request.urlopen(req, timeout=25) as resp:
+    with urlopen_retry(req, timeout=25) as resp:
         raw = resp.read()
         final_url = resp.geturl()
     try:
@@ -236,7 +250,8 @@ def title_similar(a, b):
 def get_news(state):
     try:
         req = urllib.request.Request(NEWS_URL, headers=HEADERS)
-        data = urllib.request.urlopen(req, timeout=25).read()
+        with urlopen_retry(req, timeout=25) as resp:
+            data = resp.read()
         root = ET.fromstring(data)
         items = []
         seen_keys = set()

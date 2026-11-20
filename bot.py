@@ -25,11 +25,20 @@ STATE_FILE = "state.json"
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
 
-NEWS_QUERY = urllib.parse.quote("جرائم التحقيقات الجنائية")
-NEWS_URL = (
-    "https://news.google.com/rss/search?q=" + NEWS_QUERY
-    + "&hl=ar&gl=DZ&ceid=DZ:ar"
-)
+NEWS_TOPICS = [
+    ("📰 أخبار الجزائر", "أخبار الجزائر اليوم"),
+    ("🔬 علوم وتقنية", "أخبار العلوم والتكنولوجيا"),
+    ("🎭 ثقافة وفن", "أخبار الثقافة والفن"),
+    ("🌱 أخبار إيجابية", "أخبار إيجابية وقصص نجاح"),
+    ("⚖️ جرائم وتحقيقات", "جرائم التحقيقات الجنائية"),
+]
+
+
+def news_url(query):
+    return (
+        "https://news.google.com/rss/search?q=" + urllib.parse.quote(query)
+        + "&hl=ar&gl=DZ&ceid=DZ:ar"
+    )
 
 ARABIC_TIPS = [
     "اشرب كوب ماء بعد الاستيقاظ مباشرة؛ جسدك كان بلا ترطيب طوال الليل.",
@@ -247,44 +256,60 @@ def title_similar(a, b):
     return len(sa & sb) / len(sa | sb) >= 0.55
 
 
+def fetch_feed_items(url):
+    req = urllib.request.Request(url, headers=HEADERS)
+    with urlopen_retry(req, timeout=25) as resp:
+        data = resp.read()
+    root = ET.fromstring(data)
+    items = []
+    seen_keys = set()
+    for item in root.iter("item"):
+        title = (item.findtext("title") or "").strip()
+        source = (item.findtext("source") or "").strip()
+        link = (item.findtext("link") or "").strip()
+        if not title:
+            continue
+        for sep in (" - " + source, " -" + source):
+            if title.endswith(sep):
+                title = title[: -len(sep)].strip()
+                break
+        key = normalize_title(title)
+        if not key or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        items.append({"title": title, "source": source, "link": link, "key": key})
+    return items
+
+
 def get_news(state):
+    """Pick one fresh story, rotating across NEWS_TOPICS so the feed is not
+    all crime: start at the saved topic index, walk forward until a topic
+    has a genuinely new item, and advance the index past the topic used."""
+    used = [normalize_title(u) for u in state.get("used_news", [])]
+    used_set = set(used)
     try:
-        req = urllib.request.Request(NEWS_URL, headers=HEADERS)
-        with urlopen_retry(req, timeout=25) as resp:
-            data = resp.read()
-        root = ET.fromstring(data)
-        items = []
-        seen_keys = set()
-        for item in root.iter("item"):
-            title = (item.findtext("title") or "").strip()
-            source = (item.findtext("source") or "").strip()
-            link = (item.findtext("link") or "").strip()
-            if not title:
-                continue
-            for sep in (" - " + source, " -" + source):
-                if title.endswith(sep):
-                    title = title[: -len(sep)].strip()
-                    break
-            key = normalize_title(title)
-            if not key or key in seen_keys:
-                continue
-            seen_keys.add(key)
-            items.append({"title": title, "source": source, "link": link, "key": key})
-        if not items:
-            return None
-        used = [normalize_title(u) for u in state.get("used_news", [])]
-        used_set = set(used)
+        start = int(state.get("news_topic_idx", 0)) % len(NEWS_TOPICS)
+    except Exception:
+        start = 0
+    for off in range(len(NEWS_TOPICS)):
+        ti = (start + off) % len(NEWS_TOPICS)
+        label, query = NEWS_TOPICS[ti]
+        try:
+            items = fetch_feed_items(news_url(query))
+        except Exception:
+            continue
         fresh = [it for it in items
                  if it["key"] not in used_set
                  and not any(title_similar(it["key"], u) for u in used)]
         if not fresh:
-            return None
+            continue
         chosen = random.choice(fresh)
+        chosen["topic"] = label
         used.insert(0, chosen["key"])
         state["used_news"] = used[:400]
+        state["news_topic_idx"] = (ti + 1) % len(NEWS_TOPICS)
         return chosen
-    except Exception:
-        return None
+    return None
 
 def send_telegram(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -332,7 +357,7 @@ def send_photo_upload(img_bytes, caption):
         return json.loads(resp.read().decode("utf-8"))
 
 
-def build_message(w, advice, news, riddle_q):
+def build_message(w, advice, news, riddle_q, topic="📰 أخبار متنوعة"):
     tz = ZoneInfo("Africa/Algiers")
     now = datetime.datetime.now(tz)
     weekdays = {"Monday": "الاثنين", "Tuesday": "الثلاثاء", "Wednesday": "الأربعاء",
@@ -363,7 +388,7 @@ def build_message(w, advice, news, riddle_q):
 {advice}
 {line}
 
-<b>📰 أخبار الجرائم والتحقيقات</b>
+<b>{topic}</b>
 {news}
 {line}
 
@@ -428,6 +453,7 @@ def load_state():
     st.setdefault("used_news", [])
     st.setdefault("used_advice", [])
     st.setdefault("used_riddles", [])
+    st.setdefault("news_topic_idx", 0)
     return st
 
 def save_state(st):
@@ -447,7 +473,8 @@ def run():
             article = get_news(st)
             news_block, image, caption = prepare_news(article)
             riddle_q, riddle_a = pick_riddle(st)
-            msg = build_message(w, advice, news_block, riddle_q)
+            topic = article.get("topic") if article else "📰 أخبار متنوعة"
+            msg = build_message(w, advice, news_block, riddle_q, topic)
             send_telegram(msg)
             print("Main message sent", flush=True)
             if image:

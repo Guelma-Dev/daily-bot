@@ -26,11 +26,11 @@ STATE_FILE = "state.json"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
 
 NEWS_TOPICS = [
-    ("⚡️ أمن سيبراني", "أمن سيبراني اختراق ثغرات أمن المعلومات"),
-    ("🤖 ذكاء اصطناعي", "ذكاء اصطناعي نماذج وتطبيقات"),
+    ("⚡️ أمن سيبراني", "أخبار الأمن السيبراني اختراق ثغرات"),
+    ("🤖 ذكاء اصطناعي", "أخبار الذكاء الاصطناعي نماذج جديدة"),
     ("⚡️ تقنية وألعاب", "تقنية هواتف تطبيقات ألعاب إلكترونية"),
     ("📰 أخبار الجزائر", "أخبار الجزائر اليوم"),
-    ("⚡️ أمن سيبراني", "تسريب بيانات برمجيات خبيثة قرصنة"),
+    ("⚡️ أمن سيبراني", "أخبار تسريب بيانات برمجيات خبيثة"),
     ("🌱 أخبار إيجابية", "أخبار إيجابية وقصص نجاح"),
 ]
 
@@ -215,6 +215,21 @@ class TextExtractor(HTMLParser):
             self._cur.append(data)
 
 
+BOILERPLATE_MARKERS = (
+    "انضم إلى", "انضم الى", "اشترك", "النشرة البريدية", "تابعنا",
+    "جميع الحقوق", "حقوق النشر", "ملفات تعريف الارتباط", "سياسة الخصوصية",
+    "subscribe", "newsletter", "sign up", "sign-up", "cookies",
+    "all rights reserved", "follow us", "©",
+)
+
+
+def clean_paras(paras):
+    """Drop site boilerplate (newsletter boxes, footers, cookie notices)
+    so the excerpt is the article's own text, not the page furniture."""
+    return [t for t in paras
+            if not any(m in t.lower() for m in BOILERPLATE_MARKERS)]
+
+
 def fetch_article(link):
     """Return (paragraphs, image_url) from the article page; ([], "") on failure."""
     req = urllib.request.Request(link, headers=HEADERS)
@@ -237,7 +252,7 @@ def fetch_article(link):
             break
     p = TextExtractor()
     p.feed(html_str)
-    return p.paras[:4], image
+    return clean_paras(p.paras)[:4], image
 
 def normalize_title(t):
     t = t or ""
@@ -424,8 +439,10 @@ def prepare_news(article):
     link_html = "\U0001F517 <a href=\"" + html.escape(real, quote=True) + "\">\u0627\u0642\u0631\u0623 \u0627\u0644\u062E\u0628\u0631 \u0643\u0627\u0645\u0644\u0627\u064B</a>"
     if image:
         excerpt = html.escape(paras[0], quote=False) if paras else ""
-        if len(excerpt) > 520:
-            excerpt = excerpt[:517].rsplit(" ", 1)[0] + "\u2026"
+        if len(paras) > 1 and len(excerpt) < 380:
+            excerpt += " " + html.escape(paras[1], quote=False)
+        if len(excerpt) > 700:
+            excerpt = excerpt[:697].rsplit(" ", 1)[0] + "\u2026"
         caption = head
         if excerpt:
             caption += "\n\n" + excerpt

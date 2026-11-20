@@ -27,7 +27,7 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 
 NEWS_TOPICS = [
     ("📰 أخبار الجزائر", "أخبار الجزائر اليوم"),
-    ("🔬 علوم وتقنية", "أخبار العلوم والتكنولوجيا"),
+    ("⚡️ تقنية وأمن سيبراني", "تكنولوجيا ذكاء اصطناعي أمن سيبراني"),
     ("🎭 ثقافة وفن", "أخبار الثقافة والفن"),
     ("🌱 أخبار إيجابية", "أخبار إيجابية وقصص نجاح"),
     ("⚖️ جرائم وتحقيقات", "جرائم التحقيقات الجنائية"),
@@ -418,6 +418,8 @@ def prepare_news(article):
     except Exception:
         paras, image = [], ""
     head = f"\U0001F4F0 <b>{title}</b>\n\U0001F5DE\uFE0F \u0627\u0644\u0645\u0635\u062F\u0631: {source}"
+    if (article.get("topic") or "").startswith("⚡️"):
+        head = f"⚡️ <b>{title}</b>\n\U0001F5DE\uFE0F \u0627\u0644\u0645\u0635\u062F\u0631: {source}"
     link_html = "\U0001F517 <a href=\"" + html.escape(real, quote=True) + "\">\u0627\u0642\u0631\u0623 \u0627\u0644\u062E\u0628\u0631 \u0643\u0627\u0645\u0644\u0627\u064B</a>"
     if image:
         excerpt = html.escape(paras[0], quote=False) if paras else ""
